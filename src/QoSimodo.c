@@ -110,8 +110,9 @@ void handle_agent_status(json_object *jobj)
 
 void handle_flow(json_object *jobj)
 {
-	json_object *tmpobj;
+	json_object *tmpobj, *flowobj;
 	char *key, *tmpval;
+	int ipversion;
 
 	printf("In handle flow\n");
 
@@ -120,6 +121,14 @@ void handle_flow(json_object *jobj)
 		return;
 	if (!strcmp("true", tmpval))
 		return;
+
+	if (!json_object_object_get_ex(jobj, "flow", &flowobj))
+		return;
+
+	if (!json_object_object_get_ex(flowobj, "ip_version", &tmpobj))
+		return;
+	ipversion = json_object_get_int(tmpobj);
+	printf("Got IP Version %d\n", ipversion);
 
 	dump_json_object(jobj);
 }
