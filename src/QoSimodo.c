@@ -111,15 +111,16 @@ void handle_agent_status(json_object *jobj)
 void handle_flow(json_object *jobj)
 {
 	json_object *tmpobj, *flowobj;
-	char *key, *tmpval;
+	const char *srcip, *dstip, *tmpval;
+	int srcport, dstport;
 	int ipversion;
 
-	printf("In handle flow\n");
+/*	printf("In handle flow\n"); */
 
-	tmpval = get_json_str(jobj, "internal");
-	if (!tmpval)
+	if (!json_object_object_get_ex(jobj, "internal", &tmpobj))
 		return;
-	if (!strcmp("true", tmpval))
+	tmpval = json_object_get_string(tmpobj);
+	if (!tmpval || !strcmp("true", tmpval))
 		return;
 
 	if (!json_object_object_get_ex(jobj, "flow", &flowobj))
@@ -128,9 +129,27 @@ void handle_flow(json_object *jobj)
 	if (!json_object_object_get_ex(flowobj, "ip_version", &tmpobj))
 		return;
 	ipversion = json_object_get_int(tmpobj);
-	printf("Got IP Version %d\n", ipversion);
 
-	dump_json_object(jobj);
+	if (!json_object_object_get_ex(flowobj, "local_ip", &tmpobj))
+		return;
+	srcip = json_object_get_string(tmpobj);
+
+	if (!json_object_object_get_ex(flowobj, "other_ip", &tmpobj))
+		return;
+	dstip = json_object_get_string(tmpobj);
+
+	if (!json_object_object_get_ex(flowobj, "local_port", &tmpobj))
+		return;
+	srcport = json_object_get_int(tmpobj);
+
+	if (!json_object_object_get_ex(flowobj, "other_port", &tmpobj))
+		return;
+	dstport = json_object_get_int(tmpobj);
+
+
+	printf("IPv%d Src IP:%s:%d Dst IP:%s:%d\n", ipversion, srcip, srcport, dstip, dstport);
+
+/*	dump_json_object(jobj); */
 }
 
 json_object *get_json_from_socket(char *bufptr, json_tokener *tok, int sfd, unsigned int *cnt)
@@ -234,7 +253,7 @@ int main(int argc, char *argv[])
 				if (jval) {
 					state=LENGTH;
 					length=json_object_get_int(jval);
-					printf("Got length: %d\n", length);
+/*					printf("Got length: %d\n", length); */
 
 				}
 				break;
