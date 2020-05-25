@@ -1,25 +1,4 @@
-#include <stdio.h>
-#include <sys/un.h>
-#include <sys/socket.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <errno.h>
-
-#include <json-c/json.h>
-
-#define SV_SOCK_PATH "/tmp/run/netifyd/netifyd.sock"
-#define BUFFER_SIZE 4096
-
-struct jump_table {
-	char	*type;
-	void	(*handler)(json_object *jobj);
-};
-
-struct protocol_table {
-	char		*tag;
-	unsigned int	dscp;
-};
+#include "QoSimodo.h"
 
 struct protocol_table prot[1024] = {};
 
@@ -111,16 +90,13 @@ void handle_agent_status(json_object *jobj)
 void handle_flow(json_object *jobj)
 {
 	json_object *tmpobj, *flowobj;
-	const char *srcip, *dstip, *tmpval;
-	int srcport, dstport;
-	int ipversion;
+	struct flow_struct flow;
 
 /*	printf("In handle flow\n"); */
 
 	if (!json_object_object_get_ex(jobj, "internal", &tmpobj))
 		return;
-	tmpval = json_object_get_string(tmpobj);
-	if (!tmpval || !strcmp("true", tmpval))
+	if (!strcmp("true", json_object_get_string(tmpobj)))
 		return;
 
 	if (!json_object_object_get_ex(jobj, "flow", &flowobj))
@@ -128,28 +104,27 @@ void handle_flow(json_object *jobj)
 
 	if (!json_object_object_get_ex(flowobj, "ip_version", &tmpobj))
 		return;
-	ipversion = json_object_get_int(tmpobj);
+	flow.ipversion = json_object_get_int(tmpobj);
 
 	if (!json_object_object_get_ex(flowobj, "local_ip", &tmpobj))
 		return;
-	srcip = json_object_get_string(tmpobj);
+	flow.srcip = json_object_get_string(tmpobj);
 
 	if (!json_object_object_get_ex(flowobj, "other_ip", &tmpobj))
 		return;
-	dstip = json_object_get_string(tmpobj);
+	flow.dstip = json_object_get_string(tmpobj);
 
 	if (!json_object_object_get_ex(flowobj, "local_port", &tmpobj))
 		return;
-	srcport = json_object_get_int(tmpobj);
+	flow.srcport = json_object_get_int(tmpobj);
 
 	if (!json_object_object_get_ex(flowobj, "other_port", &tmpobj))
 		return;
-	dstport = json_object_get_int(tmpobj);
+	flow.dstport = json_object_get_int(tmpobj);
+
+	find_conntrack_entry(&flow);
 
 
-	printf("IPv%d Src IP:%s:%d Dst IP:%s:%d\n", ipversion, srcip, srcport, dstip, dstport);
-
-/*	dump_json_object(jobj); */
 }
 
 json_object *get_json_from_socket(char *bufptr, json_tokener *tok, int sfd, unsigned int *cnt)

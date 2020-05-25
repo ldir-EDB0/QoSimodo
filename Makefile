@@ -9,11 +9,11 @@ include $(INCLUDE_DIR)/package.mk
 define Package/QoSimodo
   CATEGORY:=Extra
   TITLE:=QoSimodo
-  DEPENDS:=+libjson-c
+  DEPENDS:=+libjson-c +libmnl +libnetfilter-conntrack
 endef
 
 #TARGET_CFLAGS += -I$(STAGING_DIR)/usr/include
-TARGET_LDFLAGS += -ljson-c
+TARGET_LDFLAGS += -ljson-c -lnetfilter_conntrack -lmnl
 
 define Build/Compile
 	$(MAKE) -C $(PKG_BUILD_DIR) \
