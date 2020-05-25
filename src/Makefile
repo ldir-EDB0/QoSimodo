@@ -1,7 +1,13 @@
 CFLAGS += -O2 -Wall -Werror
 
-QoSimodo: QoSimodo.o conntrack.o
-	$(CC) $(CFLAGS) -o $@ QoSimodo.c conntrack.c $(LDFLAGS)
+objects = QoSimodo.o conntrack.o
 
+QoSimodo: $(objects)
+	$(CC) $(CFLAGS) -o $@ $(objects) $(LDFLAGS)
+
+QoSimodo.o: QoSimodo.h
+conntrack.o: QoSimodo.h
+
+.PHONY: clean
 clean:
-	rm -f QoSimodo *.o
+	rm -f QoSimodo $(objects)
