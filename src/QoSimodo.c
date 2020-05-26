@@ -106,6 +106,10 @@ void handle_flow(json_object *jobj)
 		return;
 	flow.ipversion = json_object_get_int(tmpobj);
 
+	if (!json_object_object_get_ex(flowobj, "ip_protocol", &tmpobj))
+		return;
+	flow.ipprotocol = json_object_get_int(tmpobj);
+
 	if (!json_object_object_get_ex(flowobj, "local_ip", &tmpobj))
 		return;
 	flow.srcip = json_object_get_string(tmpobj);
@@ -123,8 +127,9 @@ void handle_flow(json_object *jobj)
 	flow.dstport = json_object_get_int(tmpobj);
 
 	find_conntrack_entry(&flow);
+	dump_json_object(jobj);
 
-
+	printf("%u\n", flow.mark);
 }
 
 json_object *get_json_from_socket(char *bufptr, json_tokener *tok, int sfd, unsigned int *cnt)

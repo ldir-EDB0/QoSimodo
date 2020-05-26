@@ -27,6 +27,8 @@ struct flow_struct {
 	unsigned int srcport;
 	unsigned int dstport;
 	unsigned int ipversion;
+	unsigned int mark;
+	unsigned char ipprotocol;
 };
 
 int find_conntrack_entry(struct flow_struct *flow);

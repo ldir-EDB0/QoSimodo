@@ -13,6 +13,7 @@
 static int data_cb(const struct nlmsghdr *nlh, void *data)
 {
 	struct nf_conntrack *ct;
+	struct flow_struct *flow = data;
 	char buf[4096];
 
 	ct = nfct_new();
@@ -21,8 +22,9 @@ static int data_cb(const struct nlmsghdr *nlh, void *data)
 
 	nfct_nlmsg_parse(nlh, ct);
 
-	nfct_snprintf(buf, sizeof(buf), ct, NFCT_T_UNKNOWN, NFCT_O_DEFAULT, 0);
-	printf("%s\n", buf);
+	flow->mark = nfct_get_attr_u32(ct, ATTR_MARK);
+/*	nfct_snprintf(buf, sizeof(buf), ct, NFCT_T_UNKNOWN, NFCT_O_DEFAULT, 0);
+	printf("%s\n", buf); */
 
 	nfct_destroy(ct);
 
@@ -38,6 +40,9 @@ int find_conntrack_entry(struct flow_struct *flow)
 	unsigned int seq, portid;
 	struct nf_conntrack *ct;
 	int ret;
+
+	if (flow->ipversion != 4)
+		return 0;
 
 	nl = mnl_socket_open(NETLINK_NETFILTER);
 	if (nl == NULL) {
@@ -68,31 +73,29 @@ int find_conntrack_entry(struct flow_struct *flow)
 	}
 
 	nfct_set_attr_u8(ct, ATTR_L3PROTO, AF_INET);
-	nfct_set_attr_u32(ct, ATTR_IPV4_SRC, inet_addr("1.1.1.1"));
-	nfct_set_attr_u32(ct, ATTR_IPV4_DST, inet_addr("2.2.2.2"));
+	nfct_set_attr_u32(ct, ATTR_IPV4_SRC, inet_addr(flow->srcip));
+	nfct_set_attr_u32(ct, ATTR_IPV4_DST, inet_addr(flow->dstip));
 
-	nfct_set_attr_u8(ct, ATTR_L4PROTO, IPPROTO_TCP);
-	nfct_set_attr_u16(ct, ATTR_PORT_SRC, htons(20));
-	nfct_set_attr_u16(ct, ATTR_PORT_DST, htons(10));
+	nfct_set_attr_u8(ct, ATTR_L4PROTO, flow->ipprotocol);
+	nfct_set_attr_u16(ct, ATTR_PORT_SRC, htons(flow->srcport));
+	nfct_set_attr_u16(ct, ATTR_PORT_DST, htons(flow->dstport));
 
 	nfct_nlmsg_build(nlh, ct);
 
 	ret = mnl_socket_sendto(nl, nlh, nlh->nlmsg_len);
 	if (ret == -1) {
-		perror("mnl_socket_recvfrom");
-		exit(EXIT_FAILURE);
+		perror("mnl_socket_sendto");
 	}
 
 	ret = mnl_socket_recvfrom(nl, buf, sizeof(buf));
 	while (ret > 0) {
-		ret = mnl_cb_run(buf, ret, seq, portid, data_cb, NULL);
+		ret = mnl_cb_run(buf, ret, seq, portid, data_cb, (void *)flow);
 		if (ret <= MNL_CB_STOP)
 			break;
 		ret = mnl_socket_recvfrom(nl, buf, sizeof(buf));
 	}
 	if (ret == -1) {
 		perror("mnl_socket_recvfrom");
-		exit(EXIT_FAILURE);
 	}
 
 	mnl_socket_close(nl);
