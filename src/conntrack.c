@@ -23,8 +23,8 @@ static int data_cb(const struct nlmsghdr *nlh, void *data)
 	nfct_nlmsg_parse(nlh, ct);
 
 	flow->mark = nfct_get_attr_u32(ct, ATTR_MARK);
-/*	nfct_snprintf(buf, sizeof(buf), ct, NFCT_T_UNKNOWN, NFCT_O_DEFAULT, 0);
-	printf("%s\n", buf); */
+	nfct_snprintf(buf, sizeof(buf), ct, NFCT_T_UNKNOWN, NFCT_O_DEFAULT, 0);
+	printf("%s\n", buf);
 
 	nfct_destroy(ct);
 
@@ -42,7 +42,7 @@ int find_conntrack_entry(struct flow_struct *flow)
 	int ret;
 
 	if (flow->ipversion != 4)
-		return 0;
+		return 0xff;
 
 	nl = mnl_socket_open(NETLINK_NETFILTER);
 	if (nl == NULL) {
@@ -73,12 +73,12 @@ int find_conntrack_entry(struct flow_struct *flow)
 	}
 
 	nfct_set_attr_u8(ct, ATTR_L3PROTO, AF_INET);
-	nfct_set_attr_u32(ct, ATTR_IPV4_SRC, inet_addr(flow->srcip));
-	nfct_set_attr_u32(ct, ATTR_IPV4_DST, inet_addr(flow->dstip));
+	nfct_set_attr_u32(ct, ATTR_IPV4_DST, inet_addr(flow->srcip));
+	nfct_set_attr_u32(ct, ATTR_IPV4_SRC, inet_addr(flow->dstip));
 
 	nfct_set_attr_u8(ct, ATTR_L4PROTO, flow->ipprotocol);
-	nfct_set_attr_u16(ct, ATTR_PORT_SRC, htons(flow->srcport));
-	nfct_set_attr_u16(ct, ATTR_PORT_DST, htons(flow->dstport));
+	nfct_set_attr_u16(ct, ATTR_PORT_DST, htons(flow->srcport));
+	nfct_set_attr_u16(ct, ATTR_PORT_SRC, htons(flow->dstport));
 
 	nfct_nlmsg_build(nlh, ct);
 
@@ -95,7 +95,7 @@ int find_conntrack_entry(struct flow_struct *flow)
 		ret = mnl_socket_recvfrom(nl, buf, sizeof(buf));
 	}
 	if (ret == -1) {
-		perror("mnl_socket_recvfrom");
+		perror("mnl_socket_recvfrom - probably not found");
 	}
 
 	mnl_socket_close(nl);

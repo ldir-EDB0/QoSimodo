@@ -126,10 +126,10 @@ void handle_flow(json_object *jobj)
 		return;
 	flow.dstport = json_object_get_int(tmpobj);
 
-	find_conntrack_entry(&flow);
-	dump_json_object(jobj);
-
-	printf("%u\n", flow.mark);
+	if (0xff != find_conntrack_entry(&flow)) {
+		dump_json_object(jobj);
+		printf("%u\n", flow.mark);
+	}
 }
 
 json_object *get_json_from_socket(char *bufptr, json_tokener *tok, int sfd, unsigned int *cnt)
