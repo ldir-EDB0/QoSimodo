@@ -21,6 +21,12 @@ int get_json_int(json_object *jobj, char *key)
 	return(i);
 }
 
+/* string values will have been malloc'd by json-c
+ * in theory for the lifetime of the json object
+ * unless we either use json_put to claim ownership
+ * or we cop out like I do here by malloc'ing our
+ * own space and copy
+ */
 char *get_json_str(json_object *jobj, char *key)
 {
 	json_object *tmpobj;
@@ -66,7 +72,11 @@ void handle_protocols(json_object *jobj)
 
 		prot[i].tag = tag;
 		prot[i].dscp = 0;
-
+/* FIXME: somehow we need to populate the required DSCP values sensibly,
+ * for now, just initialise them to zero
+ * Thinking out loud: probably another routine that goes through the table
+ * and updates, probably from a text or json (shudder) based file.
+ */
 		printf("id=%d tag=%s dscp=%d\n", i, prot[i].tag, prot[i].dscp);
 	}
 }
@@ -87,7 +97,7 @@ void handle_agent_status(json_object *jobj)
 	dump_json_object(jobj);
 }
 
-void handle_flow(json_object *jobj)
+void handle_flow(json_object *jobj, struct my_nl_socket *mynl)
 {
 	json_object *tmpobj, *flowobj;
 	struct flow_struct flow;
@@ -126,7 +136,7 @@ void handle_flow(json_object *jobj)
 		return;
 	flow.dstport = json_object_get_int(tmpobj);
 
-	if (0xff != find_conntrack_entry(&flow)) {
+	if (0xff != find_conntrack_entry(&flow, mynl)) {
 		dump_json_object(jobj);
 		printf("%u\n", flow.mark);
 	}
@@ -171,17 +181,12 @@ json_object *get_json_from_socket(char *bufptr, json_tokener *tok, int sfd, unsi
 
 int main(int argc, char *argv[])
 {
-	struct jump_table jmp[] = {
-		{"flow", &handle_flow},
-		{"agent_status", &handle_agent_status},
-		{"protocols", &handle_protocols},
-		{"agent_hello", &handle_agent_hello},
-		{NULL, NULL}
-	};
-
 /* socket foo */
 	struct sockaddr_un addr;
 	int sfd;
+
+/* netlink socket foo */
+	struct my_nl_socket mynl;
 
 /* json foo */
 	enum json_tokener_error jerr;
@@ -220,6 +225,8 @@ int main(int argc, char *argv[])
 		exit(126);
 	}
 
+	create_conntrack_socket(&mynl);
+
 	tok=json_tokener_new();
 
 	state=NONSYNC;
@@ -252,16 +259,19 @@ int main(int argc, char *argv[])
 					break;
 				}
 
+				/* variable number of arguments was more than my smart arse jump table
+				 * and my brain could cope with - traditional if/else tree coming up
+				 */
 				str = json_object_get_string(jval);
-				/* implement switch case for strings */
-				i = 0;
-				while (jmp[i].type) {
-					if (!strcmp(jmp[i].type, str)) {
-						(*jmp[i].handler)(jobj);
-						break;;
-					}
-					i++;
-				}
+				if (!strcmp("flow", str))
+					handle_flow(jobj, &mynl);
+				else if (!strcmp("agent_status", str))
+					handle_agent_status(jobj);
+				else if (!strcmp("protocols", str))
+					handle_protocols(jobj);
+				else if (!strcmp("agent_hello", str))
+					handle_agent_hello(jobj);
+
 				break;
 				;;
 			default:
@@ -275,4 +285,6 @@ int main(int argc, char *argv[])
 
 		json_tokener_reset(tok);
 	}
+
+	close_conntrack_socket(&mynl);
 }

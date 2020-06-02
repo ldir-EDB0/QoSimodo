@@ -31,30 +31,37 @@ static int data_cb(const struct nlmsghdr *nlh, void *data)
 	return MNL_CB_OK;
 }
 
-int find_conntrack_entry(struct flow_struct *flow)
+int create_conntrack_socket(struct my_nl_socket *mynl)
 {
-	struct mnl_socket *nl;
+	mynl->nl = mnl_socket_open(NETLINK_NETFILTER);
+	if (mynl->nl == NULL) {
+		perror("mnl_socket_open");
+		exit(EXIT_FAILURE);
+	}
+
+	if (mnl_socket_bind(mynl->nl, 0, MNL_SOCKET_AUTOPID) < 0) {
+		perror("mnl_socket_bind");
+		exit(EXIT_FAILURE);
+	}
+	mynl->portid = mnl_socket_get_portid(mynl->nl);
+}
+
+int close_conntrack_socket(struct my_nl_socket *mynl)
+{
+	mnl_socket_close(mynl->nl);
+}
+
+int find_conntrack_entry(struct flow_struct *flow, struct my_nl_socket *mynl)
+{
 	struct nlmsghdr *nlh;
 	struct nfgenmsg *nfh;
 	char buf[MNL_SOCKET_BUFFER_SIZE];
-	unsigned int seq, portid;
+	unsigned int seq;
 	struct nf_conntrack *ct;
 	int ret;
 
 	if (flow->ipversion != 4)
 		return 0xff;
-
-	nl = mnl_socket_open(NETLINK_NETFILTER);
-	if (nl == NULL) {
-		perror("mnl_socket_open");
-		exit(EXIT_FAILURE);
-	}
-
-	if (mnl_socket_bind(nl, 0, MNL_SOCKET_AUTOPID) < 0) {
-		perror("mnl_socket_bind");
-		exit(EXIT_FAILURE);
-	}
-	portid = mnl_socket_get_portid(nl);
 
 	nlh = mnl_nlmsg_put_header(buf);
 	nlh->nlmsg_type = (NFNL_SUBSYS_CTNETLINK << 8) | IPCTNL_MSG_CT_GET;
@@ -82,23 +89,21 @@ int find_conntrack_entry(struct flow_struct *flow)
 
 	nfct_nlmsg_build(nlh, ct);
 
-	ret = mnl_socket_sendto(nl, nlh, nlh->nlmsg_len);
+	ret = mnl_socket_sendto(mynl->nl, nlh, nlh->nlmsg_len);
 	if (ret == -1) {
 		perror("mnl_socket_sendto");
 	}
 
-	ret = mnl_socket_recvfrom(nl, buf, sizeof(buf));
+	ret = mnl_socket_recvfrom(mynl->nl, buf, sizeof(buf));
 	while (ret > 0) {
-		ret = mnl_cb_run(buf, ret, seq, portid, data_cb, (void *)flow);
+		ret = mnl_cb_run(buf, ret, seq, mynl->portid, data_cb, (void *)flow);
 		if (ret <= MNL_CB_STOP)
 			break;
-		ret = mnl_socket_recvfrom(nl, buf, sizeof(buf));
+		ret = mnl_socket_recvfrom(mynl->nl, buf, sizeof(buf));
 	}
 	if (ret == -1) {
 		perror("mnl_socket_recvfrom - probably not found");
 	}
 
-	mnl_socket_close(nl);
-
-	return 0;
+	return(ret);
 }
