@@ -28,6 +28,7 @@ struct flow_struct {
 	unsigned int dstport;
 	unsigned int ipversion;
 	unsigned int mark;
+	unsigned int ctid;
 	unsigned char ipprotocol;
 };
 

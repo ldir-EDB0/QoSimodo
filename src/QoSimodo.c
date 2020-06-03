@@ -136,6 +136,14 @@ void handle_flow(json_object *jobj, struct my_nl_socket *mynl)
 		return;
 	flow.dstport = json_object_get_int(tmpobj);
 
+	if (!json_object_object_get_ex(flowobj, "ct_mark", &tmpobj))
+		return;
+	flow.mark = json_object_get_int(tmpobj);
+
+	if (!json_object_object_get_ex(flowobj, "ct_id", &tmpobj))
+		return;
+	flow.ctid = json_object_get_int(tmpobj);
+
 	if (0xff != find_conntrack_entry(&flow, mynl)) {
 		dump_json_object(jobj);
 		printf("%u\n", flow.mark);
