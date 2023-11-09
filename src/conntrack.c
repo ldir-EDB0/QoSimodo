@@ -15,26 +15,28 @@ static int data_cb(const struct nlmsghdr *nlh, void *data)
 	struct nf_conntrack *ct;
 	struct flow_struct *flow = data;
 	char buf[4096];
+	int ret = MNL_CB_OK;
 
 	ct = nfct_new();
-	if (ct == NULL)
-		return MNL_CB_OK;
+	if (!ct)
+		return(ret);
 
 	nfct_nlmsg_parse(nlh, ct);
-
-	flow->mark = nfct_get_attr_u32(ct, ATTR_MARK);
-	nfct_snprintf(buf, sizeof(buf), ct, NFCT_T_UNKNOWN, NFCT_O_DEFAULT, 0);
-	printf("%s\n", buf);
+	if (nfct_get_attr_u32(ct, ATTR_ID) == flow->ctid) {
+		nfct_snprintf(buf, sizeof(buf), ct, NFCT_T_UNKNOWN, NFCT_O_DEFAULT, 0);
+		printf("%s\n", buf);
+		ret = MNL_CB_STOP;
+	}
 
 	nfct_destroy(ct);
 
-	return MNL_CB_OK;
+	return(ret);
 }
 
 int create_conntrack_socket(struct my_nl_socket *mynl)
 {
 	mynl->nl = mnl_socket_open(NETLINK_NETFILTER);
-	if (mynl->nl == NULL) {
+	if (!mynl->nl) {
 		perror("mnl_socket_open");
 		exit(EXIT_FAILURE);
 	}
@@ -59,13 +61,11 @@ int find_conntrack_entry(struct flow_struct *flow, struct my_nl_socket *mynl)
 	unsigned int seq;
 	struct nf_conntrack *ct;
 	int ret;
-
-	if (flow->ipversion != 4)
-		return 0xff;
+	struct in6_addr ipv6_addr1, ipv6_addr2;
 
 	nlh = mnl_nlmsg_put_header(buf);
 	nlh->nlmsg_type = (NFNL_SUBSYS_CTNETLINK << 8) | IPCTNL_MSG_CT_GET;
-	nlh->nlmsg_flags = NLM_F_REQUEST|NLM_F_ACK;
+	nlh->nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
 	nlh->nlmsg_seq = seq = time(NULL);
 
 	nfh = mnl_nlmsg_put_extra_header(nlh, sizeof(struct nfgenmsg));
@@ -74,20 +74,51 @@ int find_conntrack_entry(struct flow_struct *flow, struct my_nl_socket *mynl)
 	nfh->res_id = 0;
 
 	ct = nfct_new();
-	if (ct == NULL) {
+	if (!ct) {
 		perror("nfct_new");
-		return 0;
+		return -2;
 	}
 
-	nfct_set_attr_u8(ct, ATTR_L3PROTO, AF_INET);
-	nfct_set_attr_u32(ct, ATTR_IPV4_DST, inet_addr(flow->srcip));
-	nfct_set_attr_u32(ct, ATTR_IPV4_SRC, inet_addr(flow->dstip));
-
-	nfct_set_attr_u8(ct, ATTR_L4PROTO, flow->ipprotocol);
-	nfct_set_attr_u16(ct, ATTR_PORT_DST, htons(flow->srcport));
-	nfct_set_attr_u16(ct, ATTR_PORT_SRC, htons(flow->dstport));
-
+/*
+	switch (flow->ipversion) {
+	case 4:
+		if (flow->islocal) {
+			printf("4L ");
+			nfct_set_attr_u8(ct, ATTR_ORIG_L4PROTO, flow->ipprotocol);
+			nfct_set_attr_u8(ct, ATTR_ORIG_L3PROTO, AF_INET);
+			nfct_set_attr_u32(ct, ATTR_ORIG_IPV4_SRC, inet_addr(flow->srcip));
+			nfct_set_attr_u32(ct, ATTR_ORIG_IPV4_DST, inet_addr(flow->dstip));
+			nfct_set_attr_u16(ct, ATTR_ORIG_PORT_SRC, htons(flow->srcport));
+			nfct_set_attr_u16(ct, ATTR_ORIG_PORT_DST, htons(flow->dstport));
+		} else {
+			printf("4R ");
+			nfct_set_attr_u8(ct, ATTR_ORIG_L4PROTO, flow->ipprotocol);
+			nfct_set_attr_u8(ct, ATTR_ORIG_L3PROTO, AF_INET);
+			nfct_set_attr_u32(ct, ATTR_ORIG_IPV4_DST, inet_addr(flow->srcip));
+			nfct_set_attr_u32(ct, ATTR_ORIG_IPV4_SRC, inet_addr(flow->dstip));
+			nfct_set_attr_u16(ct, ATTR_ORIG_PORT_DST, htons(flow->srcport));
+			nfct_set_attr_u16(ct, ATTR_ORIG_PORT_SRC, htons(flow->dstport));
+		}
+		break;
+		;;
+	case 6:
+		printf("6 ");
+		inet_pton(AF_INET6, flow->srcip, &ipv6_addr1);
+		inet_pton(AF_INET6, flow->dstip, &ipv6_addr2);
+		nfct_set_attr_u8(ct, ATTR_ORIG_L4PROTO, flow->ipprotocol);
+		nfct_set_attr_u8(ct, ATTR_ORIG_L3PROTO, AF_INET6);
+		nfct_set_attr(ct, ATTR_ORIG_IPV6_SRC, &ipv6_addr1);
+		nfct_set_attr(ct, ATTR_ORIG_IPV6_DST, &ipv6_addr2);
+		nfct_set_attr_u16(ct, ATTR_ORIG_PORT_SRC, htons(flow->srcport));
+		nfct_set_attr_u16(ct, ATTR_ORIG_PORT_DST, htons(flow->dstport));
+		break;
+		;;
+	default:
+		return -3;
+		;;
+	}
 	nfct_nlmsg_build(nlh, ct);
+*/
 
 	ret = mnl_socket_sendto(mynl->nl, nlh, nlh->nlmsg_len);
 	if (ret == -1) {
@@ -101,9 +132,11 @@ int find_conntrack_entry(struct flow_struct *flow, struct my_nl_socket *mynl)
 			break;
 		ret = mnl_socket_recvfrom(mynl->nl, buf, sizeof(buf));
 	}
-	if (ret == -1) {
+/*	if (ret == -1) {
 		perror("mnl_socket_recvfrom - probably not found");
-	}
+	}*/
+
+	nfct_destroy(ct);
 
 	return(ret);
 }

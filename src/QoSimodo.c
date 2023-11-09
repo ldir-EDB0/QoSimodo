@@ -40,9 +40,7 @@ char *get_json_str(json_object *jobj, char *key)
 	if (!tmpstr)
 		return(NULL);
 
-	len = strlen(tmpstr);
-	str = malloc(len);
-	strcpy(str, tmpstr);
+	str = strdup(tmpstr);
 	return(str);
 }
 
@@ -86,7 +84,7 @@ void handle_agent_hello(json_object *jobj)
 	char *key, *val;
 
 	printf("In handle agent_hello\n");
-	dump_json_object(jobj);
+/*	dump_json_object(jobj);*/
 }
 
 void handle_agent_status(json_object *jobj)
@@ -94,7 +92,7 @@ void handle_agent_status(json_object *jobj)
 	char *key, *val;
 
 	printf("In handle agent_status\n");
-	dump_json_object(jobj);
+/*	dump_json_object(jobj);*/
 }
 
 void handle_flow(json_object *jobj, struct my_nl_socket *mynl)
@@ -102,15 +100,20 @@ void handle_flow(json_object *jobj, struct my_nl_socket *mynl)
 	json_object *tmpobj, *flowobj;
 	struct flow_struct flow;
 
-/*	printf("In handle flow\n"); */
+	printf("In handle flow\n");
 
 	if (!json_object_object_get_ex(jobj, "internal", &tmpobj))
 		return;
 	if (!strcmp("true", json_object_get_string(tmpobj)))
 		return;
 
+
 	if (!json_object_object_get_ex(jobj, "flow", &flowobj))
 		return;
+
+	if (!json_object_object_get_ex(flowobj, "local_origin", &tmpobj))
+		return;
+	flow.islocal = strcmp("false", json_object_get_string(tmpobj));
 
 	if (!json_object_object_get_ex(flowobj, "ip_version", &tmpobj))
 		return;
@@ -144,9 +147,8 @@ void handle_flow(json_object *jobj, struct my_nl_socket *mynl)
 		return;
 	flow.ctid = json_object_get_int(tmpobj);
 
-	if (0xff != find_conntrack_entry(&flow, mynl)) {
+	if (flow.ctid && find_conntrack_entry(&flow, mynl) >= 0) {
 		dump_json_object(jobj);
-		printf("%u\n", flow.mark);
 	}
 }
 

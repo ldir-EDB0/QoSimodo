@@ -29,6 +29,7 @@ struct flow_struct {
 	unsigned int ipversion;
 	unsigned int mark;
 	unsigned int ctid;
+	unsigned int islocal;
 	unsigned char ipprotocol;
 };
 
